@@ -5,6 +5,8 @@ import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
 import redis.clients.jedis.Response;
 import redis.clients.jedis.Transaction;
+import com.cars24.redis.ratelimiter.exception.RedisConnectionException;
+import redis.clients.jedis.exceptions.JedisException;
 
 public class RateLimiter {
     private final JedisPool jedisPool;
@@ -19,7 +21,17 @@ public class RateLimiter {
         poolConfig.setTestOnBorrow(true);
         poolConfig.setTestOnReturn(true);
         poolConfig.setTestWhileIdle(true);
-        this.jedisPool = new JedisPool(poolConfig, redisHost, port);
+
+        try {
+            this.jedisPool = new JedisPool(poolConfig, redisHost, port, 2000); // 2 second timeout
+            // Test connection during initialization
+            try (Jedis jedis = jedisPool.getResource()) {
+                jedis.ping();
+            }
+        } catch (JedisException e) {
+            throw new RedisConnectionException("Failed to establish Redis connection: " + e.getMessage(), e);
+        }
+
         this.maxRequests = maxRequests;
         this.timeWindowSeconds = timeWindowSeconds;
     }
@@ -47,10 +59,14 @@ public class RateLimiter {
             transaction.exec();
 
             return countResponse.get() < maxRequests;
+        } catch (JedisException e) {
+            throw new RedisConnectionException("Failed to communicate with Redis: " + e.getMessage(), e);
         }
     }
 
     public void shutdown() {
-        jedisPool.close();
+        if (jedisPool != null) {
+            jedisPool.close();
+        }
     }
 }
