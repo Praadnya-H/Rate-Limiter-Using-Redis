@@ -16,9 +16,4 @@ public class RateLimiterConfig {
         this.timeWindowSeconds = timeWindowSeconds;
     }
 
-//    // Getters and setters
-//    public String getRedisHost() { return redisHost; }
-//    public int getRedisPort() { return redisPort; }
-//    public int getMaxRequests() { return maxRequests; }
-//    public int getTimeWindowSeconds() { return timeWindowSeconds; }
 }
