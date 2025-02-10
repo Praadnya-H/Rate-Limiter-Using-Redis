@@ -1,20 +1,20 @@
 package com.cars24.redis.ratelimiter;
 
+import com.cars24.redis.ratelimiter.config.RateLimiterConfig;
 import org.junit.jupiter.api.*;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 import static org.junit.jupiter.api.Assertions.*;
 
 public class RateLimiterTest {
-    private static final String REDIS_HOST = "localhost";
-    private static final int REDIS_PORT = 6379;
     private static final String TEST_USER_ID = "test-user";
     private static JedisPool jedisPool;
     private RateLimiter rateLimiter;
+    private RateLimiterConfig rateLimiterConfig;
 
     @BeforeAll
     static void setUp() {
-        jedisPool = new JedisPool(REDIS_HOST, REDIS_PORT);
+        jedisPool = new JedisPool("localhost", 6379);
     }
 
     @BeforeEach
@@ -23,12 +23,19 @@ public class RateLimiterTest {
         try (Jedis jedis = jedisPool.getResource()) {
             jedis.flushAll();
         }
+
+        // Initialize RateLimiterConfig
+        rateLimiterConfig = new RateLimiterConfig();
+        rateLimiterConfig.setRedisHost("localhost");
+        rateLimiterConfig.setRedisPort(6379);
     }
 
     @Test
     void testBasicRateLimiting() {
         // Configure rate limiter: 5 requests per 1 second
-        rateLimiter = new RateLimiter(REDIS_HOST, REDIS_PORT, 5, 1);
+        rateLimiterConfig.setMaxRequests(5);
+        rateLimiterConfig.setTimeWindowSeconds(1);
+        rateLimiter = new RateLimiter(rateLimiterConfig);
 
         // First 5 requests should succeed
         for (int i = 0; i < 5; i++) {
@@ -44,7 +51,9 @@ public class RateLimiterTest {
     @Test
     void testSlidingWindow() throws InterruptedException {
         // Configure rate limiter: 2 requests per 2 seconds
-        rateLimiter = new RateLimiter(REDIS_HOST, REDIS_PORT, 2, 2);
+        rateLimiterConfig.setMaxRequests(2);
+        rateLimiterConfig.setTimeWindowSeconds(2);
+        rateLimiter = new RateLimiter(rateLimiterConfig);
 
         // First 2 requests succeed
         assertTrue(rateLimiter.tryAcquire(TEST_USER_ID));
@@ -64,7 +73,10 @@ public class RateLimiterTest {
     @Test
     void testMultipleUsers() {
         // Configure rate limiter: 3 requests per second
-        rateLimiter = new RateLimiter(REDIS_HOST, REDIS_PORT, 3, 1);
+        rateLimiterConfig.setMaxRequests(3);
+        rateLimiterConfig.setTimeWindowSeconds(1);
+        rateLimiter = new RateLimiter(rateLimiterConfig);
+
         String user1 = "user1";
         String user2 = "user2";
 
@@ -84,7 +96,10 @@ public class RateLimiterTest {
     @Test
     void testConcurrentRequests() throws InterruptedException {
         // Configure rate limiter: 5 requests per second
-        rateLimiter = new RateLimiter(REDIS_HOST, REDIS_PORT, 5, 1);
+        rateLimiterConfig.setMaxRequests(5);
+        rateLimiterConfig.setTimeWindowSeconds(1);
+        rateLimiter = new RateLimiter(rateLimiterConfig);
+
         int numThreads = 10;
         Thread[] threads = new Thread[numThreads];
         int[] successCount = {0};

@@ -1,10 +1,7 @@
 package com.cars24.redis.ratelimiter;
 
-import redis.clients.jedis.Jedis;
-import redis.clients.jedis.JedisPool;
-import redis.clients.jedis.JedisPoolConfig;
-import redis.clients.jedis.Response;
-import redis.clients.jedis.Transaction;
+import redis.clients.jedis.*;
+import com.cars24.redis.ratelimiter.config.RateLimiterConfig;
 import com.cars24.redis.ratelimiter.exception.RedisConnectionException;
 import redis.clients.jedis.exceptions.JedisException;
 
@@ -13,7 +10,7 @@ public class RateLimiter {
     private final int maxRequests;
     private final int timeWindowSeconds;
 
-    public RateLimiter(String redisHost, int port, int maxRequests, int timeWindowSeconds) {
+    public RateLimiter(RateLimiterConfig config) {
         JedisPoolConfig poolConfig = new JedisPoolConfig();
         poolConfig.setMaxTotal(128);
         poolConfig.setMaxIdle(128);
@@ -23,8 +20,7 @@ public class RateLimiter {
         poolConfig.setTestWhileIdle(true);
 
         try {
-            this.jedisPool = new JedisPool(poolConfig, redisHost, port, 2000); // 2 second timeout
-            // Test connection during initialization
+            this.jedisPool = new JedisPool(poolConfig, config.getRedisHost(), config.getRedisPort(), 2000);
             try (Jedis jedis = jedisPool.getResource()) {
                 jedis.ping();
             }
@@ -32,8 +28,8 @@ public class RateLimiter {
             throw new RedisConnectionException("Failed to establish Redis connection: " + e.getMessage(), e);
         }
 
-        this.maxRequests = maxRequests;
-        this.timeWindowSeconds = timeWindowSeconds;
+        this.maxRequests = config.getMaxRequests();
+        this.timeWindowSeconds = config.getTimeWindowSeconds();
     }
 
     public boolean tryAcquire(String userId) {
@@ -42,20 +38,10 @@ public class RateLimiter {
             long currentTime = System.currentTimeMillis();
 
             Transaction transaction = jedis.multi();
-
-            // Remove counts older than our time window
             transaction.zremrangeByScore(key, 0, currentTime - timeWindowSeconds * 1000);
-
-            // Count existing requests in the current window
             Response<Long> countResponse = transaction.zcard(key);
-
-            // Add the current request timestamp
             transaction.zadd(key, currentTime, String.valueOf(currentTime));
-
-            // Set key expiration
             transaction.expire(key, timeWindowSeconds);
-
-            // Execute all commands atomically
             transaction.exec();
 
             return countResponse.get() < maxRequests;
